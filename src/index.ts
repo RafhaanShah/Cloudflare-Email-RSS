@@ -12,7 +12,7 @@
  */
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		return new Response('Hello World!');
-	},
+  async email(message: EmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log('Hello World!');
+  },
 } satisfies ExportedHandler<Env>;
