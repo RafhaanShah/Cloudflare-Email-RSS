@@ -102,9 +102,8 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
-    // TODO: alert if a new feed is created
-    // could use a separate worker as well
     console.log(`Created new feed: ${feedFileKey}`);
+    await notify(env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${domain}/${feedFileKey}`);
   }
 
   console.log(`Updated feed: ${feedKey}, entry: ${entryKey}`);
@@ -181,7 +180,7 @@ function getFeedLink(domain: string, feedFileKey: string, headers: Header[]): At
   // assuming bucket custom domain is configured
   // https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains
   links.push({
-    '@_href': 'https://' + domain + '/' + feedFileKey,
+    '@_href': `https://${domain}/${feedFileKey}`,
     '@_rel': 'self',
     '@_type': 'application/atom+xml',
   });
@@ -203,4 +202,26 @@ function getEntryLink(headers: Header[]): AtomLink[] {
   }
 
   return links;
+}
+
+export async function notify(token: string, user: string, message: string): Promise<any> {
+  const form = new URLSearchParams();
+  form.append('token', token);
+  form.append('user', user);
+  form.append('title', 'New RSS Feed Added');
+  form.append('message', message);
+
+  const response = await fetch('https://api.pushover.net/1/messages.json', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: form.toString(),
+  });
+
+  if (!response.ok) {
+    console.warn(`Failed to send notification: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
 }
