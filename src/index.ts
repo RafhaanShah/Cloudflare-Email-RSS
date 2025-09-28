@@ -11,6 +11,8 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+// validate XML at https://validator.w3.org/feed/
+
 import * as PostalMime from 'postal-mime';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
@@ -35,7 +37,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   }
 
   const content = email.html || email.text;
-  const isHtml = !!email.html;
+  const contentType = !!email.html ? 'html' : 'text';
   if (!content) {
     throw new Error(`Missing 'content' in email`);
   }
@@ -54,7 +56,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
       title: email.from.name || feedKey,
-      id: feedKey,
+      id: generateId(feedKey, feedKey),
       updated: date,
       link: getFeedLink(domain, feedFileKey, email.headers),
       entry: entry,
@@ -63,15 +65,33 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   // TODO: remove stale entries + keep size reasonable
   // ~20 entries or 2MB, about ~100-300KB / entry
+  // remember to delete uploaded pages as well
 
-  const entryId = sanitizeField(email.messageId);
+  const entryKey = sanitizeField(email.messageId);
+  const entryLink = getEntryLink(email.headers);
+  if (!entryLink.length) {
+    // some readers complain if there is no link for an entry
+    // so if there is no actual link, we upload the page
+    // and provide a link to it
+    const contentPath = 'content';
+    const entryPath = `${contentPath}/${entryKey}.${contentType}`;
+    const entryUrl = `https://${domain}/${entryPath}`;
+    await bucket.put(entryPath, content);
+    entryLink.push({
+      '@_href': entryUrl,
+      '@_rel': 'alternate',
+      '@_type': 'text/html',
+    });
+    console.log(`Uploaded entry: ${entryPath}`);
+  }
+
   addFeedEntry(feed, {
     title: email.subject || email.messageId,
-    id: entryId,
+    id: generateId(feedKey, entryKey),
     updated: date,
-    link: getEntryLink(email.headers),
+    link: entryLink,
     content: {
-      '@_type': isHtml ? 'html' : 'text',
+      '@_type': contentType,
       '#text': content,
     },
     author: {
@@ -87,7 +107,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     console.log(`Created new feed: ${feedFileKey}`);
   }
 
-  console.log(`Updated feed: ${feedKey}, new entry: ${entryId}`);
+  console.log(`Updated feed: ${feedKey}, entry: ${entryKey}`);
 }
 
 function getEmailPrefix(email?: string): string | null {
@@ -123,13 +143,19 @@ async function putFeed(bucket: R2Bucket, key: string, feed: AtomFeed): Promise<v
     format: false,
   });
 
-  const xmlString = builder.build(feed);
+  const xmlContent = builder.build(feed);
+  const xmlString = `<?xml version="1.0" encoding="utf-8"?>\n${xmlContent}`;
   await bucket.put(key, xmlString);
 }
 
 function sanitizeField(field: string): string {
-  // remove <, >, &, ', " and whitespace
-  return field.replace(/[<>&'"\s]/g, '');
+  // remove <, >, &, ', " and whitespace from start and end
+  return field.replace(/^[<>&'"\s]+|[<>&'"\s]+$/g, '');
+}
+
+function generateId(namespace: string, id: string): string {
+  // generate urn
+  return `urn:${namespace}:${id}`;
 }
 
 function getHeader(headers: Header[], key: string): string | undefined {
