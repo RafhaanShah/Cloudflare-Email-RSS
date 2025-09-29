@@ -31,8 +31,8 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const rawEmail = new Response(message.raw);
   const email = await parser.parse(await rawEmail.arrayBuffer());
 
-  const feedKey = getEmailPrefix(email.from.address);
-  if (!feedKey) {
+  const senderEmail = sanitizeEmail(email.from.address);
+  if (!senderEmail) {
     throw new Error(`Missing 'from' address: ${email.from}`);
   }
 
@@ -45,18 +45,19 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const date = new Date().toISOString();
   const domain = env.BUCKET_DOMAIN;
   const bucket = env.RSS_BUCKET;
-  const feedFileKey = feedKey + '.xml';
+  const feedFileKey = senderEmail + '.xml';
   const prevFeed = await getFeed(bucket, feedFileKey);
   const entry: AtomEntry[] = prevFeed?.feed.entry ?? [];
 
   // recreate Feed so we always have up to date values
   // ID should never change, since if we have a new feedKey
   // we would be creating a new file anyway
+  const [senderAddress, senderDomain] = senderEmail.split('@');
   const feed: AtomFeed = {
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
-      title: email.from.name || feedKey,
-      id: generateId(feedKey, feedKey),
+      title: email.from.name || senderEmail,
+      id: generateId(senderAddress, senderDomain),
       updated: date,
       link: getFeedLink(domain, feedFileKey, email.headers),
       entry: entry,
@@ -87,7 +88,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   addFeedEntry(feed, {
     title: email.subject || email.messageId,
-    id: generateId(feedKey, entryKey),
+    id: generateId(senderEmail, entryKey),
     updated: date,
     link: entryLink,
     content: {
@@ -102,19 +103,20 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
-    console.log(`Created new feed: ${feedFileKey}`);
+    console.log(`Uploaded new feed: ${feedFileKey}`);
     await notify(env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${domain}/${feedFileKey}`);
   }
 
-  console.log(`Updated feed: ${feedKey}, entry: ${entryKey}`);
+  console.log(`Updated feed: ${senderEmail}, entry: ${entryKey}`);
 }
 
-function getEmailPrefix(email?: string): string | null {
+function sanitizeEmail(email?: string): string | null {
   if (!email) return null;
-  // take everything before the @
-  const localPart = email.split('@')[0];
-  // then take everything before the first +
-  return localPart.split('+')[0];
+  // remove email aliases like me+rss@mail.com -> me@mail.com
+  const [address, domain] = email.split('@');
+  if (!domain) return null;
+  const cleanedAddress = address.split('+')[0];
+  return `${cleanedAddress}@${domain}`;
 }
 
 function addFeedEntry(feed: AtomFeed, entry: AtomEntry) {
