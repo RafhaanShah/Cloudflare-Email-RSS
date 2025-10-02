@@ -45,7 +45,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const date = new Date().toISOString();
   const bucket = env.RSS_BUCKET;
   const bucketDomain = env.BUCKET_DOMAIN;
-  const feedFileKey = senderEmail + '.xml';
+  const feedFileKey = sanitizeId(senderEmail) + '.xml';
   const prevFeed = await getFeed(bucket, feedFileKey);
   const entry: AtomEntry[] = prevFeed?.feed.entry ?? [];
 
@@ -72,7 +72,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   // ~20 entries or 2MB, about ~100-300KB / entry
   // remember to delete uploaded pages as well
 
-  const entryKey = sanitizeField(email.messageId);
+  const entryKey = sanitizeId(email.messageId);
   const entryLink = getEntryLink(email.headers);
   if (!entryLink.length) {
     // some readers complain if there is no link for an entry
