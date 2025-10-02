@@ -57,7 +57,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
       title: email.from.name || senderEmail,
-      id: generateId(senderAddress, senderDomain),
+      id: generateId(senderDomain, senderAddress),
       updated: date,
       link: getFeedLink(domain, feedFileKey, email.headers),
       entry: entry,
@@ -88,7 +88,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   addFeedEntry(feed, {
     title: email.subject || email.messageId,
-    id: generateId(senderEmail, entryKey),
+    id: generateId(senderDomain, entryKey),
     updated: date,
     link: entryLink,
     content: {
@@ -154,9 +154,16 @@ function sanitizeField(field: string): string {
   return field.replace(/^[<>&'"\s]+|[<>&'"\s]+$/g, '');
 }
 
-function generateId(namespace: string, id: string): string {
+function generateId(namespace: string, identifier: string): string {
   // generate urn
-  return `urn:${namespace}:${id}`;
+  const ns = sanitizeId(namespace)
+  const id = sanitizeId(identifier)
+  return `urn:${ns}:${id}`;
+}
+
+function sanitizeId(input: string): string {
+  // urn cannot contain special chars
+  return input.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
 function getHeader(headers: Header[], key: string): string | undefined {
