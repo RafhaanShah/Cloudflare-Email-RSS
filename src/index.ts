@@ -108,7 +108,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
     console.log(`Uploaded new feed: ${feedFileKey}`);
-    await notify(env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${bucketDomain}/${feedFileKey}`);
+    await notify(env.NOTIFY_URL, env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${bucketDomain}/${feedFileKey}`);
   }
 
   console.log(`Updated feed: ${senderEmail}, entry: ${entryKey}`);
@@ -160,8 +160,8 @@ function sanitizeField(field: string): string {
 
 function generateId(namespace: string, identifier: string): string {
   // generate urn
-  const ns = sanitizeId(namespace)
-  const id = sanitizeId(identifier)
+  const ns = sanitizeId(namespace);
+  const id = sanitizeId(identifier);
   return `urn:${ns}:${id}`;
 }
 
@@ -237,24 +237,31 @@ function getDomain(url: string): string | null {
   }
 }
 
-async function notify(token: string, user: string, message: string): Promise<any> {
+async function notify(url: string, token: string, user: string, message: string): Promise<any> {
+  // pushover API
   const form = new URLSearchParams();
   form.append('token', token);
   form.append('user', user);
   form.append('title', 'New RSS Feed Added');
   form.append('message', message);
 
-  const response = await fetch('https://api.pushover.net/1/messages.json', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: form.toString(),
-  });
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(1000),
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: form.toString(),
+    });
 
-  if (!response.ok) {
-    console.warn(`Failed to send notification: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      console.warn(`Failed to send notification: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error(`Error sending notification: ${error.message}`);
   }
-
-  return response.json();
 }
