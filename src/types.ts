@@ -47,11 +47,8 @@ export interface AtomEntry {
   title: string;
   id: string;
   updated: string;
+  summary?: string;
   link?: AtomLink[];
-  summary?: {
-    '@_type': 'text' | 'html';
-    '#text': string;
-  };
   content?: {
     '@_type': 'text' | 'html';
     '#text': string;
@@ -68,6 +65,8 @@ export interface AtomFeed {
     title: string;
     id: string;
     updated: string;
+    icon?: string;
+    logo?: string;
     link?: AtomLink[];
     author?: {
       name: string;

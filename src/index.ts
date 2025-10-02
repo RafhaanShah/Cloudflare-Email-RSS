@@ -43,8 +43,8 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   }
 
   const date = new Date().toISOString();
-  const domain = env.BUCKET_DOMAIN;
   const bucket = env.RSS_BUCKET;
+  const bucketDomain = env.BUCKET_DOMAIN;
   const feedFileKey = senderEmail + '.xml';
   const prevFeed = await getFeed(bucket, feedFileKey);
   const entry: AtomEntry[] = prevFeed?.feed.entry ?? [];
@@ -53,13 +53,17 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   // ID should never change, since if we have a new feedKey
   // we would be creating a new file anyway
   const [senderAddress, senderDomain] = senderEmail.split('@');
+  const feedLink = getFeedLink(senderDomain, email.headers);
+  const feedDomain = getDomain(feedLink['@_href']);
   const feed: AtomFeed = {
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
       title: email.from.name || senderEmail,
       id: generateId(senderDomain, senderAddress),
       updated: date,
-      link: getFeedLink(domain, feedFileKey, email.headers),
+      link: [feedLink, getDefaultFeedLink(bucketDomain, feedFileKey)],
+      icon: feedDomain ? await getIconUrl(feedDomain, 32) : undefined,
+      logo: feedDomain ? await getIconUrl(feedDomain, 128) : undefined,
       entry: entry,
     },
   };
@@ -76,7 +80,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     // and provide a link to it
     const contentPath = 'content';
     const entryPath = `${contentPath}/${entryKey}.${contentType}`;
-    const entryUrl = `https://${domain}/${entryPath}`;
+    const entryUrl = `https://${bucketDomain}/${entryPath}`;
     await bucket.put(entryPath, content);
     entryLink.push({
       '@_href': entryUrl,
@@ -104,7 +108,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
     console.log(`Uploaded new feed: ${feedFileKey}`);
-    await notify(env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${domain}/${feedFileKey}`);
+    await notify(env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${bucketDomain}/${feedFileKey}`);
   }
 
   console.log(`Updated feed: ${senderEmail}, entry: ${entryKey}`);
@@ -172,29 +176,34 @@ function getHeader(headers: Header[], key: string): string | undefined {
   return header?.value;
 }
 
-function getFeedLink(domain: string, feedFileKey: string, headers: Header[]): AtomLink[] {
-  const links: AtomLink[] = [];
-
+function getFeedLink(senderDomain: string, headers: Header[]): AtomLink {
   // substack header for the feed link
   const listUrl = getHeader(headers, 'List-URL');
   if (listUrl) {
-    links.push({
+    return {
       '@_href': sanitizeField(listUrl),
       '@_rel': 'alternate',
       '@_type': 'text/html',
-    });
+    };
   }
 
+  // default to sender domain
+  return {
+    '@_href': `https://${senderDomain}`,
+    '@_rel': 'alternate',
+    '@_type': 'text/html',
+  };
+}
+
+function getDefaultFeedLink(bucketDomain: string, feedFileKey: string): AtomLink {
   // default to the url to the feed file in the bucket
   // assuming bucket custom domain is configured
   // https://developers.cloudflare.com/r2/buckets/public-buckets/#custom-domains
-  links.push({
-    '@_href': `https://${domain}/${feedFileKey}`,
+  return {
+    '@_href': `https://${bucketDomain}/${feedFileKey}`,
     '@_rel': 'self',
     '@_type': 'application/atom+xml',
-  });
-
-  return links;
+  };
 }
 
 function getEntryLink(headers: Header[]): AtomLink[] {
@@ -213,7 +222,22 @@ function getEntryLink(headers: Header[]): AtomLink[] {
   return links;
 }
 
-export async function notify(token: string, user: string, message: string): Promise<any> {
+async function getIconUrl(domain: string, size: number): Promise<string> {
+  // use Google favicon API
+  return `https://s2.googleusercontent.com/s2/favicons?domain=${domain}&sz=${size}`;
+}
+
+function getDomain(url: string): string | null {
+  try {
+    const withProtocol = url.match(/^https?:\/\//) ? url : `https://${url}`;
+    const parsed = new URL(withProtocol);
+    return parsed.hostname;
+  } catch {
+    return null;
+  }
+}
+
+async function notify(token: string, user: string, message: string): Promise<any> {
   const form = new URLSearchParams();
   form.append('token', token);
   form.append('user', user);
