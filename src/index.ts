@@ -45,7 +45,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const date = new Date().toISOString();
   const bucket = env.RSS_BUCKET;
   const bucketDomain = env.BUCKET_DOMAIN;
-  const feedFileKey = sanitizeId(senderEmail) + '.xml';
+  const feedFileKey = sanitizeUrn(senderEmail) + '.xml';
   const prevFeed = await getFeed(bucket, feedFileKey);
   const entry: AtomEntry[] = prevFeed?.feed.entry ?? [];
 
@@ -55,11 +55,12 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const [senderAddress, senderDomain] = senderEmail.split('@');
   const feedLink = getFeedLink(senderDomain, email.headers);
   const feedDomain = getDomain(feedLink['@_href']);
+  const feedId = generateUrn(senderDomain, senderAddress);
   const feed: AtomFeed = {
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
       title: email.from.name || senderEmail,
-      id: generateId(senderDomain, senderAddress),
+      id: feedId,
       updated: date,
       link: [feedLink, getDefaultFeedLink(bucketDomain, feedFileKey)],
       icon: feedDomain ? await getIconUrl(feedDomain, 32) : undefined,
@@ -72,14 +73,13 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   // ~20 entries or 2MB, about ~100-300KB / entry
   // remember to delete uploaded pages as well
 
-  const entryKey = sanitizeId(email.messageId);
+  const entryKey = sanitizeUrn(email.messageId);
   const entryLink = getEntryLink(email.headers);
   if (!entryLink.length) {
     // some readers complain if there is no link for an entry
     // so if there is no actual link, we upload the page
     // and provide a link to it
-    const contentPath = 'content';
-    const entryPath = `${contentPath}/${entryKey}.${contentType}`;
+    const entryPath = `${senderDomain}/${senderAddress}/${entryKey}.${contentType}`;
     const entryUrl = `https://${bucketDomain}/${entryPath}`;
     await bucket.put(entryPath, content);
     entryLink.push({
@@ -90,9 +90,11 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     console.log(`Uploaded entry: ${entryPath}`);
   }
 
+  const titleString = email.subject || email.messageId;
   addFeedEntry(feed, {
-    title: email.subject || email.messageId,
-    id: generateId(senderDomain, entryKey),
+    title: titleString,
+    summary: titleString,
+    id: generateUrn(senderDomain, entryKey),
     updated: date,
     link: entryLink,
     content: {
@@ -158,14 +160,14 @@ function sanitizeField(field: string): string {
   return field.replace(/^[<>&'"\s]+|[<>&'"\s]+$/g, '');
 }
 
-function generateId(namespace: string, identifier: string): string {
+function generateUrn(namespace: string, identifier: string): string {
   // generate urn
-  const ns = sanitizeId(namespace);
-  const id = sanitizeId(identifier);
+  const ns = sanitizeUrn(namespace);
+  const id = sanitizeUrn(identifier);
   return `urn:${ns}:${id}`;
 }
 
-function sanitizeId(input: string): string {
+function sanitizeUrn(input: string): string {
   // urn cannot contain special chars
   return input.replace(/[^a-zA-Z0-9]/g, '-');
 }
@@ -259,6 +261,7 @@ async function notify(url: string, token: string, user: string, message: string)
       console.warn(`Failed to send notification: ${response.status} ${response.statusText}`);
     }
 
+    console.log(`Sent notification via ${url}`);
     return response.json();
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
