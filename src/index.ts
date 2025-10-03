@@ -110,7 +110,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
     console.log(`Uploaded new feed: ${feedFileKey}`);
-    await notify(env.NOTIFY_URL, env.PUSHOVER_TOKEN, env.PUSHOVER_USER, `https://${bucketDomain}/${feedFileKey}`);
+    await notify(env.PUSHOVER_URL, env.PUSHOVER_TOKEN, env.PUSHOVER_USER, env.PUSHOVER_DEVICE, `https://${bucketDomain}/${feedFileKey}`);
   }
 
   console.log(`Updated feed: ${senderEmail}, entry: ${entryKey}`);
@@ -169,7 +169,8 @@ function generateUrn(namespace: string, identifier: string): string {
 
 function sanitizeUrn(input: string): string {
   // urn cannot contain special chars
-  return input.replace(/[^a-zA-Z0-9]/g, '-');
+  const removedStartEnd = sanitizeField(input);
+  return removedStartEnd.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
 function getHeader(headers: Header[], key: string): string | undefined {
@@ -239,13 +240,14 @@ function getDomain(url: string): string | null {
   }
 }
 
-async function notify(url: string, token: string, user: string, message: string): Promise<any> {
+async function notify(url: string, token: string, user: string, device: string, message: string): Promise<any> {
   // pushover API
   const form = new URLSearchParams();
+  form.append('title', 'New RSS Feed Added');
   form.append('token', token);
   form.append('user', user);
-  form.append('title', 'New RSS Feed Added');
   form.append('message', message);
+  form.append('device ', device);
 
   try {
     const response = await fetch(url, {
