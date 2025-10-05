@@ -1,0 +1,16 @@
+POST /cdn-cgi/handler/email?from=sender@example.com&to=recipient@example.com HTTP/1.1
+Host: localhost:8787
+
+Content-Type: application/json
+User-Agent: curl/8.0
+Received: from smtp.example.com (127.0.0.1) by cloudflare-email.com (unknown) id for <recipient@example.com>; Sun, 05 Oct 2025 08:00:00 +0000
+From: "Tester" <tester@example.com>
+Reply-To: sender@example.com
+To: recipient@example.com
+Subject: Testing Email Workers Local Dev
+Content-Type: text/html; charset="windows-1252"
+X-Mailer: Curl
+Date: Sun, 05 Oct 2025 08:00:00 +0000
+Message-ID: <123456-abcdef@example.com>
+
+<p>Hello World!</p>
