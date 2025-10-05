@@ -110,10 +110,10 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   await putFeed(bucket, feedFileKey, feed);
   if (!prevFeed) {
     console.log(`Uploaded new feed: ${feedFileKey}`);
-    await notify(env.PUSHOVER_URL, env.PUSHOVER_TOKEN, env.PUSHOVER_USER, env.PUSHOVER_DEVICE, `https://${bucketDomain}/${feedFileKey}`);
+    await notify(env, 'New RSS Feed Added', `https://${bucketDomain}/${feedFileKey}`);
   }
 
-  console.log(`Updated feed: ${senderEmail}, entry: ${entryKey}`);
+  console.log(`Updated feed: ${feedFileKey}, entry: ${entryKey}`);
 }
 
 function sanitizeEmail(email?: string): string | null {
@@ -240,18 +240,18 @@ function getDomain(url: string): string | null {
   }
 }
 
-async function notify(url: string, token: string, user: string, device: string, message: string): Promise<any> {
+async function notify(env: Env, title: string, message: string): Promise<void> {
   // pushover API
   const form = new URLSearchParams();
-  form.append('title', 'New RSS Feed Added');
-  form.append('token', token);
-  form.append('user', user);
+  form.append('token', env.PUSHOVER_TOKEN);
+  form.append('user', env.PUSHOVER_USER);
+  form.append('device ', env.PUSHOVER_DEVICE);
+  form.append('title', title);
   form.append('message', message);
-  form.append('device ', device);
 
   try {
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(1000),
+    const response = await fetch(env.PUSHOVER_URL, {
+      signal: AbortSignal.timeout(env.PUSHOVER_TIMEOUT),
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -263,8 +263,7 @@ async function notify(url: string, token: string, user: string, device: string, 
       console.warn(`Failed to send notification: ${response.status} ${response.statusText}`);
     }
 
-    console.log(`Sent notification via ${url}`);
-    return response.json();
+    console.log(`Sent notification via ${env.PUSHOVER_URL}`);
   } catch (err: unknown) {
     const error = err instanceof Error ? err : new Error(String(err));
     console.error(`Error sending notification: ${error.message}`);

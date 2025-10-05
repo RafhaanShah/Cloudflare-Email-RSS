@@ -35,7 +35,8 @@
    * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
    */
   "vars": {
-    "PUSHOVER_URL": "https://api.pushover.net/1/messages.json"
+    "PUSHOVER_URL": "https://api.pushover.net/1/messages.json",
+    "PUSHOVER_TIMEOUT": 1000
   }
   /**
    * Note: Use secrets to store sensitive data.
