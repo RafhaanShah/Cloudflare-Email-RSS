@@ -1,0 +1,11 @@
+Received: from smtp.domain.com (127.0.0.1) by cloudflare-email.com (unknown) id for <recipient@domain.com>; Sun, 05 Oct 2025 08:00:00 +0000
+From: "Sender" <sender@domain.com>
+Reply-To: sender@domain.com
+To: recipient@domain.com
+Subject: Subject
+Content-Type: text/html
+X-Mailer: Curl
+Date: Sun, 05 Oct 2025 08:00:00 +0000
+Message-ID: <message-id2>
+
+<p>Email Content 2</p>
