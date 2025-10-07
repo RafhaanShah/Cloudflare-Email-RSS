@@ -36,7 +36,15 @@
    */
   "vars": {
     "PUSHOVER_URL": "https://api.pushover.net/1/messages.json",
-    "PUSHOVER_TIMEOUT": 1000
+    "PUSHOVER_TIMEOUT": 1000,
+    "PRETTY_XML": false,
+  },
+  "env": {
+    "testing": {
+      "vars": {
+        "PRETTY_XML": true
+      }
+    },
   }
   /**
    * Note: Use secrets to store sensitive data.

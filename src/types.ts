@@ -44,27 +44,27 @@ export interface AtomLink {
 }
 
 export interface AtomEntry {
-  title: string;
   id: string;
   updated: string;
+  title: string;
   summary?: string;
   link?: AtomLink[];
-  content?: {
-    '@_type': 'text' | 'html';
-    '#text': string;
-  };
   author?: {
     name: string;
     email?: string;
+  };
+  content?: {
+    '@_type': 'text' | 'html';
+    '#text': string;
   };
 }
 
 export interface AtomFeed {
   feed: {
     '@_xmlns': 'http://www.w3.org/2005/Atom';
-    title: string;
     id: string;
     updated: string;
+    title: string;
     icon?: string;
     logo?: string;
     link?: AtomLink[];

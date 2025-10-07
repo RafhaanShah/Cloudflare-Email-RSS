@@ -59,12 +59,16 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
   const feed: AtomFeed = {
     feed: {
       '@_xmlns': 'http://www.w3.org/2005/Atom',
-      title: email.from.name || senderEmail,
       id: feedId,
       updated: date,
-      link: [feedLink, getDefaultFeedLink(bucketDomain, feedFileKey)],
+      title: email.from.name || senderEmail,
       icon: feedDomain ? await getIconUrl(feedDomain, 32) : undefined,
       logo: feedDomain ? await getIconUrl(feedDomain, 128) : undefined,
+      link: [feedLink, getDefaultFeedLink(bucketDomain, feedFileKey)],
+      author: {
+        name: email.from.name,
+        email: email.from.address,
+      },
       entry: entry,
     },
   };
@@ -92,22 +96,22 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   const titleString = email.subject || email.messageId;
   addFeedEntry(feed, {
-    title: titleString,
-    summary: titleString,
     id: generateUrn(senderDomain, entryKey),
     updated: date,
+    title: titleString,
+    summary: titleString,
     link: entryLink,
-    content: {
-      '@_type': contentType,
-      '#text': content,
-    },
     author: {
       name: email.from.name,
       email: email.from.address,
     },
+    content: {
+      '@_type': contentType,
+      '#text': content,
+    },
   });
 
-  await putFeed(bucket, feedFileKey, feed);
+  await putFeed(bucket, feedFileKey, feed, env.PRETTY_XML);
   if (!prevFeed) {
     console.log(`Uploaded new feed: ${feedFileKey}`);
     await notify(env, 'New RSS Feed Added', `https://${bucketDomain}/${feedFileKey}`);
@@ -144,10 +148,10 @@ async function getFeed(bucket: R2Bucket, key: string): Promise<AtomFeed | null> 
   return parser.parse(xmlString) as AtomFeed;
 }
 
-async function putFeed(bucket: R2Bucket, key: string, feed: AtomFeed): Promise<void> {
+async function putFeed(bucket: R2Bucket, key: string, feed: AtomFeed, format: boolean): Promise<void> {
   const builder = new XMLBuilder({
     ignoreAttributes: false,
-    format: false,
+    format: format,
   });
 
   const xmlContent = builder.build(feed);
