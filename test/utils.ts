@@ -2,6 +2,7 @@ import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import type { AtomFeed, AtomEntry } from '../src/types';
 
 export const fakeDate = new Date('2025-10-05T08:00:00.000Z');
+export const feedFile = 'sender-domain-com.xml';
 
 export function streamFromString(input: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();

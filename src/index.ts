@@ -67,15 +67,15 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
       link: [feedLink, getDefaultFeedLink(bucketDomain, feedFileKey)],
       author: {
         name: email.from.name,
-        email: email.from.address,
+        email: senderEmail,
       },
       entry: entry,
     },
   };
 
-  // TODO: remove stale entries + keep size reasonable
-  // ~20 entries or 2MB, about ~100-300KB / entry
-  // remember to delete uploaded pages as well
+  // remove stale entries and keep feed size reasonable
+  const removedEntries = trimEntriesToFit(feed.feed.entry ?? [], env.FEED_MAX_SIZE_BYTES, env.FEED_MAX_ENTRIES);
+  await deleteEntries(bucket, senderDomain, senderAddress, removedEntries);
 
   const entryKey = sanitizeUrn(email.messageId);
   const entryLink = getEntryLink(email.headers);
@@ -103,7 +103,7 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     link: entryLink,
     author: {
       name: email.from.name,
-      email: email.from.address,
+      email: senderEmail,
     },
     content: {
       '@_type': contentType,
@@ -239,7 +239,7 @@ function getDomain(url: string): string | null {
     const withProtocol = url.match(/^https?:\/\//) ? url : `https://${url}`;
     const parsed = new URL(withProtocol);
     return parsed.hostname;
-  } catch {
+  } catch (_: unknown) {
     return null;
   }
 }
@@ -272,4 +272,45 @@ async function notify(env: Env, title: string, message: string): Promise<void> {
     const error = err instanceof Error ? err : new Error(String(err));
     console.error(`Error sending notification: ${error.message}`);
   }
+}
+
+function trimEntriesToFit(entries: AtomEntry[], maxBytes: number, maxEntries: number): AtomEntry[] {
+  const encoder = new TextEncoder();
+  const encodedSizes = entries.map((entry) => {
+    const text = entry.content?.['#text'] ?? '';
+    return encoder.encode(text).length;
+  });
+
+  let totalSize = encodedSizes.reduce((sum, len) => sum + len, 0);
+  console.log(totalSize);
+  const removedEntries: AtomEntry[] = [];
+  if (entries.length == 0 || maxBytes < 0 || maxEntries < 0) {
+    return removedEntries;
+  }
+
+  // trim from the end until both limits are satisfied
+  while (entries.length > maxEntries || totalSize > maxBytes) {
+    const removed = entries.pop();
+    const removedSize = encodedSizes.pop();
+    if (removedSize !== undefined) {
+      totalSize -= removedSize;
+    }
+    if (removed) {
+      removedEntries.push(removed);
+    }
+  }
+  return removedEntries;
+}
+
+async function deleteEntries(bucket: R2Bucket, senderDomain: string, senderAddress: string, removedEntries: AtomEntry[]): Promise<void> {
+  const entryPaths: string[] = removedEntries.map((entry) => {
+    let ext = 'html';
+    if (entry.content?.['@_type'] === 'text') ext = 'txt';
+    const parts = entry.id.split(':');
+    const entryKey = parts[parts.length - 1];
+    return `${senderDomain}/${senderAddress}/${entryKey}.${ext}`;
+  });
+  try {
+    await bucket.delete(entryPaths);
+  } catch (_) {}
 }

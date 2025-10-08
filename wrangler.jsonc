@@ -38,13 +38,8 @@
     "PUSHOVER_URL": "https://api.pushover.net/1/messages.json",
     "PUSHOVER_TIMEOUT": 1000,
     "PRETTY_XML": false,
-  },
-  "env": {
-    "testing": {
-      "vars": {
-        "PRETTY_XML": true
-      }
-    },
+    "FEED_MAX_ENTRIES": 20,
+    "FEED_MAX_SIZE_BYTES": 2000000
   }
   /**
    * Note: Use secrets to store sensitive data.
