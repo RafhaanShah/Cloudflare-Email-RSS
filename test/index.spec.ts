@@ -37,7 +37,6 @@ describe('Email-RSS Worker', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    fetchMock.deactivate();
   });
 
   it('uploads a new feed and entry', async () => {
@@ -75,6 +74,7 @@ describe('Email-RSS Worker', () => {
     const addedEntry2 = await getBucketItemContent(testEnv.RSS_BUCKET, fakeEntryFile2);
     expect(addedEntry2).toEqual(entry2.content?.['#text']);
   });
+  
   it('removes entries from an existing feed', async () => {
     testEnv.FEED_MAX_SIZE_BYTES = 0;
 
