@@ -10,13 +10,13 @@
 		"cf-typegen": "wrangler types"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.19",
-		"typescript": "^5.5.2",
+		"@cloudflare/vitest-pool-workers": "^0.9.11",
+		"typescript": "^5.9.3",
 		"vitest": "~3.2.0",
 		"wrangler": "^4.40.2"
 	},
 	"dependencies": {
-		"fast-xml-parser": "^5.2.5",
-		"postal-mime": "^2.4.4"
+		"fast-xml-parser": "^5.3.0",
+		"postal-mime": "^2.5.0"
 	}
 }
