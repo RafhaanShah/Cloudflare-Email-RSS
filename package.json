@@ -16,7 +16,7 @@
 		"wrangler": "^4.59.3"
 	},
 	"dependencies": {
-		"fast-xml-parser": "^5.3.3",
+		"fast-xml-parser": "^5.3.4",
 		"postal-mime": "^2.7.1"
 	}
 }
