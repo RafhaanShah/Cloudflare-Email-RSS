@@ -16,7 +16,7 @@
 import * as PostalMime from 'postal-mime';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
-import { AtomEntry, AtomFeed, AtomLink, OpmlDocument, OpmlOutline } from './types';
+import { AtomEntry, AtomFeed, AtomLink, OpmlDocument } from './types';
 import { Header } from 'postal-mime';
 
 export default {
@@ -119,9 +119,6 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 
   // update OPML feed list
   const opml = await getOpml(bucket, env.OPML_FILE);
-  const feedTitle = feed.feed.title;
-  const feedUrl = `https://${bucketDomain}/${feedFileKey}`;
-  addOpmlOutline(opml, { '@_type': 'rss', '@_text': feedTitle, '@_title': feedTitle, '@_xmlUrl': feedUrl });
   await syncOpmlWithBucket(bucket, opml, bucketDomain);
   await putOpml(bucket, env.OPML_FILE, opml, env.PRETTY_XML);
 
@@ -342,7 +339,12 @@ async function getOpml(bucket: R2Bucket, key: string): Promise<OpmlDocument> {
 
   const xmlString = await obj.text();
   const parser = new XMLParser({ ignoreAttributes: false, ignoreDeclaration: true, isArray: (name) => name === 'outline' });
-  return parser.parse(xmlString) as OpmlDocument;
+  const parsed = parser.parse(xmlString) as OpmlDocument;
+  if (!parsed.opml.body || typeof parsed.opml.body === 'string') {
+    parsed.opml.body = { outline: [] };
+  }
+  parsed.opml.body.outline ??= [];
+  return parsed;
 }
 
 async function putOpml(bucket: R2Bucket, key: string, opml: OpmlDocument, format: boolean): Promise<void> {
@@ -353,17 +355,8 @@ async function putOpml(bucket: R2Bucket, key: string, opml: OpmlDocument, format
   await bucket.put(key, xmlString);
 }
 
-function addOpmlOutline(opml: OpmlDocument, outline: OpmlOutline): void {
-  const outlines = opml.opml.body.outline;
-  const index = outlines.findIndex((o) => o['@_xmlUrl'] === outline['@_xmlUrl']);
-  if (index >= 0) {
-    outlines[index] = outline;
-  } else {
-    outlines.push(outline);
-  }
-}
-
 async function syncOpmlWithBucket(bucket: R2Bucket, opml: OpmlDocument, bucketDomain: string): Promise<void> {
+  // list all feed files in the bucket
   const feedKeys = new Set<string>();
   let cursor: string | undefined;
   do {
@@ -377,10 +370,30 @@ async function syncOpmlWithBucket(bucket: R2Bucket, opml: OpmlDocument, bucketDo
   } while (cursor);
 
   const prefix = `https://${bucketDomain}/`;
+
+  // remove outlines for feeds that no longer exist in the bucket
   opml.opml.body.outline = opml.opml.body.outline.filter((o) => {
     const url = o['@_xmlUrl'];
     if (!url.startsWith(prefix)) return true;
     const key = url.slice(prefix.length);
     return feedKeys.has(key);
   });
+
+  // add outlines for feeds in the bucket that are missing from the OPML
+  const existingUrls = new Set(opml.opml.body.outline.map((o) => o['@_xmlUrl']));
+  for (const key of feedKeys) {
+    const feedUrl = `${prefix}${key}`;
+    if (existingUrls.has(feedUrl)) continue;
+
+    const feed = await getFeed(bucket, key);
+    if (!feed) continue;
+
+    const title = feed.feed.title || key;
+    opml.opml.body.outline.push({
+      '@_type': 'rss',
+      '@_text': title,
+      '@_title': title,
+      '@_xmlUrl': feedUrl,
+    });
+  }
 }

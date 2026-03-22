@@ -109,11 +109,11 @@ describe('Email-RSS Worker', () => {
     expect(opmlXml).toEqual(objToXml(expectedOpml));
   });
 
-  it('adds new feed to existing OPML', async () => {
-    const outline1 = makeOpmlOutline({ title: 'Other', xmlUrl: 'https://rss.bucket.com/other-example-com.xml' });
-    const existingOpml = makeOpmlDocument([outline1]);
-    await testEnv.RSS_BUCKET.put('other-example-com.xml', 'fake');
-    await testEnv.RSS_BUCKET.put(opmlFile, objToXml(existingOpml));
+  it('adds missing feeds from bucket to existing OPML', async () => {
+    // seed a second feed in the bucket that is NOT in the OPML
+    const otherFeed = makeAtomFeed({ title: 'Other', id: 'urn:example-com:other' });
+    await testEnv.RSS_BUCKET.put('other-example-com.xml', objToXml(otherFeed));
+    await testEnv.RSS_BUCKET.put(opmlFile, objToXml(makeOpmlDocument()));
 
     const email = makeEmail();
 
@@ -121,7 +121,8 @@ describe('Email-RSS Worker', () => {
     await waitOnExecutionContext(ctx);
 
     const opmlXml = await getBucketItemContent(testEnv.RSS_BUCKET, opmlFile);
-    const expectedOpml = makeOpmlDocument([outline1, makeOpmlOutline()]);
+    const otherOutline = makeOpmlOutline({ title: 'Other', xmlUrl: 'https://rss.bucket.com/other-example-com.xml' });
+    const expectedOpml = makeOpmlDocument([otherOutline, makeOpmlOutline()]);
     expect(opmlXml).toEqual(objToXml(expectedOpml));
   });
 
