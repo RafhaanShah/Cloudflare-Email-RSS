@@ -38,8 +38,9 @@
     "PUSHOVER_URL": "https://api.pushover.net/1/messages.json",
     "PUSHOVER_TIMEOUT": 1000,
     "PRETTY_XML": false,
-    "FEED_MAX_ENTRIES": 1000,
-    "FEED_MAX_SIZE_BYTES": 10000000
+    "FEED_MAX_ENTRIES": 20,
+    "FEED_MAX_SIZE_BYTES": 1000000,
+    "OPML_FILE": "feeds.opml"
   }
   /**
    * Note: Use secrets to store sensitive data.

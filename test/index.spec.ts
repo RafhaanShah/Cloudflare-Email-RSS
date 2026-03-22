@@ -1,7 +1,7 @@
 import { fetchMock, createExecutionContext, waitOnExecutionContext, env } from 'cloudflare:test';
 import { beforeEach, afterEach, describe, it, expect, vi, beforeAll } from 'vitest';
 import worker from '../src/index';
-import { makeEmail, makeAtomFeed, makeAtomEntry, objToXml, getBucketItemContent, fakeDate, feedFile } from './utils';
+import { makeEmail, makeAtomFeed, makeAtomEntry, objToXml, getBucketItemContent, fakeDate, feedFile, opmlFile, makeOpmlOutline, makeOpmlDocument } from './utils';
 
 // create context for each test
 let ctx: ExecutionContext;
@@ -24,7 +24,7 @@ describe('Email-RSS Worker', () => {
     vi.setSystemTime(fakeDate);
 
     // mock any requests
-    fetchMock.get(/.*/).intercept({ path: /.+/, method: /.+/ }).reply(200, '{"status":"ok"}');
+    fetchMock.get(/.*/).intercept({ path: /.+/, method: /.+/ }).reply(200, '{"status":"ok"}').persist();
 
     // create execution context
     ctx = createExecutionContext();
@@ -33,6 +33,7 @@ describe('Email-RSS Worker', () => {
     testEnv = env;
     testEnv.BUCKET_DOMAIN = 'rss.bucket.com';
     testEnv.PRETTY_XML = true;
+    testEnv.OPML_FILE = 'feeds.opml';
   });
 
   afterEach(() => {
@@ -95,5 +96,63 @@ describe('Email-RSS Worker', () => {
     
     const deletedEntry = await testEnv.RSS_BUCKET.get(entry1File);
     expect(deletedEntry).toBeNull();
+  });
+
+  it('creates OPML file on first feed', async () => {
+    const email = makeEmail();
+
+    await worker.email(email, testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const opmlXml = await getBucketItemContent(testEnv.RSS_BUCKET, opmlFile);
+    const expectedOpml = makeOpmlDocument([makeOpmlOutline()]);
+    expect(opmlXml).toEqual(objToXml(expectedOpml));
+  });
+
+  it('adds new feed to existing OPML', async () => {
+    const outline1 = makeOpmlOutline({ title: 'Other', xmlUrl: 'https://rss.bucket.com/other-example-com.xml' });
+    const existingOpml = makeOpmlDocument([outline1]);
+    await testEnv.RSS_BUCKET.put('other-example-com.xml', 'fake');
+    await testEnv.RSS_BUCKET.put(opmlFile, objToXml(existingOpml));
+
+    const email = makeEmail();
+
+    await worker.email(email, testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const opmlXml = await getBucketItemContent(testEnv.RSS_BUCKET, opmlFile);
+    const expectedOpml = makeOpmlDocument([outline1, makeOpmlOutline()]);
+    expect(opmlXml).toEqual(objToXml(expectedOpml));
+  });
+
+  it('does not duplicate OPML outline for same sender', async () => {
+    const email1 = makeEmail();
+    const email2 = makeEmail({ messageId: '<message-id2>' });
+
+    await worker.email(email1, testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    ctx = createExecutionContext();
+    await worker.email(email2, testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const opmlXml = await getBucketItemContent(testEnv.RSS_BUCKET, opmlFile);
+    const expectedOpml = makeOpmlDocument([makeOpmlOutline()]);
+    expect(opmlXml).toEqual(objToXml(expectedOpml));
+  });
+
+  it('removes stale outlines from OPML', async () => {
+    const staleOutline = makeOpmlOutline({ title: 'Stale', xmlUrl: 'https://rss.bucket.com/stale-feed.xml' });
+    const existingOpml = makeOpmlDocument([staleOutline]);
+    await testEnv.RSS_BUCKET.put(opmlFile, objToXml(existingOpml));
+
+    const email = makeEmail();
+
+    await worker.email(email, testEnv, ctx);
+    await waitOnExecutionContext(ctx);
+
+    const opmlXml = await getBucketItemContent(testEnv.RSS_BUCKET, opmlFile);
+    const expectedOpml = makeOpmlDocument([makeOpmlOutline()]);
+    expect(opmlXml).toEqual(objToXml(expectedOpml));
   });
 });

@@ -1,5 +1,5 @@
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-import type { AtomFeed, AtomEntry } from '../src/types';
+import type { AtomFeed, AtomEntry, OpmlDocument, OpmlOutline } from '../src/types';
 
 export const fakeDate = new Date('2025-10-05T08:00:00.000Z');
 export const feedFile = 'sender-domain-com.xml';
@@ -143,4 +143,33 @@ export function objToXml(obj: any): string {
 export function xmlToObj(xmlString: string): any {
   const parser = new XMLParser({ ignoreAttributes: false });
   return parser.parse(xmlString);
+}
+
+export const opmlFile = 'feeds.opml';
+
+export function makeOpmlOutline({
+  title = 'Sender',
+  xmlUrl = 'https://rss.bucket.com/sender-domain-com.xml',
+}: { title?: string; xmlUrl?: string } = {}): OpmlOutline {
+  return {
+    '@_type': 'rss',
+    '@_text': title,
+    '@_title': title,
+    '@_xmlUrl': xmlUrl,
+  };
+}
+
+export function makeOpmlDocument(outlines: OpmlOutline[] = []): OpmlDocument {
+  return {
+    opml: {
+      '@_version': '2.0',
+      head: {
+        title: 'RSS Feeds',
+        dateModified: fakeDate.toISOString(),
+      },
+      body: {
+        outline: outlines,
+      },
+    },
+  };
 }

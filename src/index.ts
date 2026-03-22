@@ -16,7 +16,7 @@
 import * as PostalMime from 'postal-mime';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 
-import { AtomEntry, AtomFeed, AtomLink } from './types';
+import { AtomEntry, AtomFeed, AtomLink, OpmlDocument, OpmlOutline } from './types';
 import { Header } from 'postal-mime';
 
 export default {
@@ -116,6 +116,14 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
     console.log(`Uploaded new feed: ${feedFileKey}`);
     await notify(env, 'New RSS Feed Added', `https://${bucketDomain}/${feedFileKey}`);
   }
+
+  // update OPML feed list
+  const opml = await getOpml(bucket, env.OPML_FILE);
+  const feedTitle = feed.feed.title;
+  const feedUrl = `https://${bucketDomain}/${feedFileKey}`;
+  addOpmlOutline(opml, { '@_type': 'rss', '@_text': feedTitle, '@_title': feedTitle, '@_xmlUrl': feedUrl });
+  await syncOpmlWithBucket(bucket, opml, bucketDomain);
+  await putOpml(bucket, env.OPML_FILE, opml, env.PRETTY_XML);
 
   console.log(`Updated feed: ${feedFileKey}, entry: ${entryKey}`);
 }
@@ -313,4 +321,66 @@ async function deleteEntries(bucket: R2Bucket, senderDomain: string, senderAddre
   try {
     await bucket.delete(entryPaths);
   } catch (_) {}
+}
+
+async function getOpml(bucket: R2Bucket, key: string): Promise<OpmlDocument> {
+  const obj = await bucket.get(key);
+  if (!obj) {
+    return {
+      opml: {
+        '@_version': '2.0',
+        head: {
+          title: 'RSS Feeds',
+          dateModified: new Date().toISOString(),
+        },
+        body: {
+          outline: [],
+        },
+      },
+    };
+  }
+
+  const xmlString = await obj.text();
+  const parser = new XMLParser({ ignoreAttributes: false, ignoreDeclaration: true, isArray: (name) => name === 'outline' });
+  return parser.parse(xmlString) as OpmlDocument;
+}
+
+async function putOpml(bucket: R2Bucket, key: string, opml: OpmlDocument, format: boolean): Promise<void> {
+  opml.opml.head.dateModified = new Date().toISOString();
+  const builder = new XMLBuilder({ ignoreAttributes: false, format: format });
+  const xmlContent = builder.build(opml);
+  const xmlString = `<?xml version="1.0" encoding="utf-8"?>\n${xmlContent}`;
+  await bucket.put(key, xmlString);
+}
+
+function addOpmlOutline(opml: OpmlDocument, outline: OpmlOutline): void {
+  const outlines = opml.opml.body.outline;
+  const index = outlines.findIndex((o) => o['@_xmlUrl'] === outline['@_xmlUrl']);
+  if (index >= 0) {
+    outlines[index] = outline;
+  } else {
+    outlines.push(outline);
+  }
+}
+
+async function syncOpmlWithBucket(bucket: R2Bucket, opml: OpmlDocument, bucketDomain: string): Promise<void> {
+  const feedKeys = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const listed = await bucket.list({ cursor });
+    for (const obj of listed.objects) {
+      if (obj.key.endsWith('.xml')) {
+        feedKeys.add(obj.key);
+      }
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  const prefix = `https://${bucketDomain}/`;
+  opml.opml.body.outline = opml.opml.body.outline.filter((o) => {
+    const url = o['@_xmlUrl'];
+    if (!url.startsWith(prefix)) return true;
+    const key = url.slice(prefix.length);
+    return feedKeys.has(key);
+  });
 }

@@ -75,3 +75,23 @@ export interface AtomFeed {
     entry?: AtomEntry[];
   };
 }
+
+export interface OpmlOutline {
+  '@_type': 'rss';
+  '@_text': string;
+  '@_title': string;
+  '@_xmlUrl': string;
+}
+
+export interface OpmlDocument {
+  opml: {
+    '@_version': '2.0';
+    head: {
+      title: string;
+      dateModified: string;
+    };
+    body: {
+      outline: OpmlOutline[];
+    };
+  };
+}
