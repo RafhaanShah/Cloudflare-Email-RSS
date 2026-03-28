@@ -9,6 +9,11 @@ Create your own RSS (Atom) feeds from emails, processed and hosted by Cloudflare
 1. An OPML file (`feeds.opml` by default) is maintained in the bucket, keeping a synced list of all feeds
 1. Your RSS Reader is configured to fetch this feed file from Cloudflare R2 periodically, or import the OPML file to subscribe to all feeds at once
 
+## What you can do with this
+1. Setup [email forwarding](https://support.google.com/mail/answer/10957?hl=en-GB) rules so all your email newsletters (e.g. Substack) gets forwarded to your Cloudflare address or use your Cloudflare address to sign up
+1. (Optional) Configure your self-hosted RSS Aggregator (e.g. [FreshRSS](https://github.com/FreshRSS/FreshRSS)) to sync with the generated OPML to fetch all your feeds and keep read / unread status tracked
+1. Use a mobile RSS Reader (e.g. [FeedMe](https://play.google.com/store/apps/details?id=com.seazon.feedme)) to sync with FreshRSS / Cloudflare Bucket to download and read your articles
+
 ## Cloudflare Setup
 
 1. A [Cloudflare Account](https://dash.cloudflare.com/) and [Domain](https://domains.cloudflare.com/) (needed for email routing)
